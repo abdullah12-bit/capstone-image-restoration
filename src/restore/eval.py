@@ -14,6 +14,7 @@ from typing import Dict, List, Mapping, Optional, Sequence, Union
 import numpy as np
 
 from restore import metrics
+from restore.lpips import lpips
 from restore.pipeline import composite_output
 
 ArrayF32 = np.ndarray
@@ -23,11 +24,15 @@ CLASSICAL_BASELINE = "median"
 BOARD_METRICS = ["psnr", "ssim"]
 
 
-def _row_metrics(restored: ArrayF32, pristine: ArrayF32) -> Dict[str, float]:
-    return {
+def _row_metrics(restored: ArrayF32, pristine: ArrayF32,
+                   include_lpips: bool = False) -> Dict[str, float]:
+    scored = {
         "psnr": metrics.psnr(restored, pristine),
         "ssim": metrics.ssim(restored, pristine),
     }
+    if include_lpips:
+        scored["lpips"] = lpips(restored, pristine)
+    return scored
 
 
 def _write_ppm(path: pathlib.Path, image: np.ndarray) -> None:
@@ -59,6 +64,7 @@ def score_board(
     out_dir: Optional[PathLike] = None,
     manifest_entries: Optional[Sequence[Mapping[str, object]]] = None,
     return_restored: bool = False,
+    include_lpips: bool = False,
 ) -> List[Dict[str, object]]:
     scored: List[Dict[str, object]] = []
     figures: List[np.ndarray] = []
@@ -70,7 +76,7 @@ def score_board(
         restored = composite_output(damaged, fill, damage_mask)
         scored_row: Dict[str, object] = {
             "method": row["method"],
-            **_row_metrics(restored, pristine),
+            **_row_metrics(restored, pristine, include_lpips=include_lpips),
         }
         if return_restored or out_dir is not None:
             scored_row["restored"] = restored
@@ -91,7 +97,8 @@ def score_board(
         (directory / "config.json").write_text(
             json.dumps(
                 {"classical_baseline": CLASSICAL_BASELINE,
-                 "metrics": BOARD_METRICS},
+                 "metrics": BOARD_METRICS + (["lpips"] if include_lpips
+                                             else [])},
                 indent=2,
             ),
             encoding="utf-8",

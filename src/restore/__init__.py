@@ -14,10 +14,11 @@ T1 ships CPU-only NumPy stubs with the composite guarantee
 (clean pixels survive bit-exactly). Learned detector/restorer land in T5.
 """
 
-from restore import baseline, eval, metrics, simulator
+from restore import baseline, eval, lpips, metrics, simulator
 from restore.baseline import identity, median_fill, median_restore
 from restore.eval import CLASSICAL_BASELINE, score_board
 from restore.loader import iter_pairs, random_crop_and_flip, synthetic_pristine
+from restore.lpips import lpips
 from restore.manifest import (
     TEST_SIZE,
     TOTAL_PAIRS,
@@ -55,6 +56,7 @@ __all__ = [
     "identity",
     "iter_pairs",
     "load_manifest",
+    "lpips",
     "median_fill",
     "median_restore",
     "metrics",
