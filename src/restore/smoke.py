@@ -179,6 +179,7 @@ def run_smoke(
         "restorer": restorer_report,
         "means": means,
         "verdict": verdict,
+        "pipeline_green": pipeline_green,
         "train": {
             key: value
             for key, value in train_result.items()

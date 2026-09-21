@@ -51,11 +51,10 @@ def test_red_pipeline_never_promotes_even_with_better_scores():
 
 def test_two_fix_loops_then_escalate_with_evidence():
     assert MAX_FIX_LOOPS == 2
-    assert smoke_verdict(pipeline_green=False, fix_loops_used=0, **_rows()) == {
-        "verdict": "fix",
-        "reason": "pipeline not green",
-        "loops_left": 2,
-    }
+    first = smoke_verdict(pipeline_green=False, fix_loops_used=0, **_rows())
+    assert first["verdict"] == "fix"
+    assert first["loops_left"] == 2
+    assert first["evidence"]["pipeline_green"] is False
     assert (
         smoke_verdict(pipeline_green=False, fix_loops_used=2, **_rows())["verdict"]
         == "escalate"

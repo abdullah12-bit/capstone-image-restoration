@@ -27,8 +27,12 @@ def smoke_verdict(
         loops_left = MAX_FIX_LOOPS - fix_loops_used
         return {
             "verdict": "fix" if loops_left > 0 else "escalate",
-            "reason": "pipeline not green",
+            "reason": "pipeline not green: load, train, score, figures, weights",
             "loops_left": max(loops_left, 0),
+            "evidence": {
+                "pipeline_green": False,
+                "fix_loops_used": fix_loops_used,
+            },
         }
     bar = {
         metric: bool(
@@ -37,13 +41,22 @@ def smoke_verdict(
         for metric in GATE_METRICS
     }
     if all(bar.values()):
-        return {"verdict": "promote", "reason": "green + metric bar", "bar": bar}
+        return {
+            "verdict": "promote",
+            "reason": "green + metric bar",
+            "bar": bar,
+            "evidence": {"ours": dict(ours), "identity": dict(identity),
+                         "classical": dict(classical)},
+        }
     loops_left = MAX_FIX_LOOPS - fix_loops_used
     return {
         "verdict": "fix" if loops_left > 0 else "escalate",
         "reason": "metric bar missed",
         "bar": bar,
         "loops_left": max(loops_left, 0),
+        "evidence": {"ours": dict(ours), "identity": dict(identity),
+                     "classical": dict(classical),
+                     "fix_loops_used": fix_loops_used},
     }
 
 
