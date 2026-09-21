@@ -16,6 +16,32 @@ from restore.manifest import build_manifest, canonical_pair_id, seed_for_pair
 ArrayF32 = np.ndarray
 
 
+def random_crop_and_flip(
+    damaged: ArrayF32, damage_mask: np.ndarray, seed: int = 0, crop_size: int = 256
+) -> Tuple[ArrayF32, np.ndarray]:
+    if damaged.ndim != 3 or damaged.shape[2] != 3:
+        raise ValueError(f"damaged image must be HxWx3, got {damaged.shape}")
+    if damage_mask.shape != damaged.shape[:2]:
+        raise ValueError(
+            f"damage mask shape {damage_mask.shape} must match image "
+            f"{damaged.shape[:2]}"
+        )
+    height, width = damaged.shape[:2]
+    if height < crop_size or width < crop_size:
+        raise ValueError(
+            f"image {height}x{width} smaller than crop {crop_size}"
+        )
+    rng = np.random.default_rng(seed)
+    top = int(rng.integers(0, height - crop_size + 1))
+    left = int(rng.integers(0, width - crop_size + 1))
+    cropped_damaged = damaged[top : top + crop_size, left : left + crop_size].copy()
+    cropped_mask = damage_mask[top : top + crop_size, left : left + crop_size].copy()
+    if bool(rng.integers(0, 2)):
+        cropped_damaged = cropped_damaged[:, ::-1].copy()
+        cropped_mask = cropped_mask[:, ::-1].copy()
+    return cropped_damaged, cropped_mask
+
+
 def synthetic_pristine(pair_id: str, height: int = 64, width: int = 64) -> ArrayF32:
     rng = np.random.default_rng(seed_for_pair(pair_id))
     return rng.random((height, width, 3), dtype=np.float32)
