@@ -8,13 +8,15 @@ Data seams: ``iter_pairs`` / ``synthetic_pristine`` (loader) and
 damage parameters, and content hash per pair. Eval seams: ``psnr`` /
 ``ssim`` (metrics), ``median_restore`` / ``identity`` (classical
 baseline), ``score_board`` (fixed scoreboards with figures + manifest +
-config).
+config). Training seams: ``select_best_checkpoint`` (best-validation selection),
+``run_full_training`` / ``export_full_run`` (gated full run + versioned
+artifacts with the three-board protocol).
 
 T1 ships CPU-only NumPy stubs with the composite guarantee
 (clean pixels survive bit-exactly). Learned detector/restorer land in T5.
 """
 
-from restore import baseline, eval, lpips, metrics, simulator
+from restore import baseline, eval, lpips, metrics, simulator, training
 from restore.baseline import identity, median_fill, median_restore
 from restore.eval import CLASSICAL_BASELINE, score_board
 from restore.loader import iter_pairs, random_crop_and_flip, synthetic_pristine
@@ -38,8 +40,17 @@ from restore.simulator import (
     EXTENDED_TYPES,
     simulate_damage,
 )
+from restore.training import (
+    BACKBONE,
+    check_three_boards,
+    export_full_run,
+    run_full_training,
+    select_best_checkpoint,
+    validate_full_config,
+)
 
 __all__ = [
+    "BACKBONE",
     "CLASSICAL_BASELINE",
     "CORE_TYPES",
     "EXTENDED_TYPES",
@@ -49,10 +60,12 @@ __all__ = [
     "baseline",
     "build_manifest",
     "canonical_pair_id",
+    "check_three_boards",
     "composite_output",
     "content_hash",
     "detect",
     "eval",
+    "export_full_run",
     "identity",
     "iter_pairs",
     "load_manifest",
@@ -65,12 +78,16 @@ __all__ = [
     "random_crop_and_flip",
     "restore",
     "restore_masked",
+    "run_full_training",
     "save_manifest",
     "score_board",
     "seed_for_pair",
+    "select_best_checkpoint",
     "simulate_damage",
     "simulator",
     "split_for_index",
     "ssim",
     "synthetic_pristine",
+    "training",
+    "validate_full_config",
 ]
