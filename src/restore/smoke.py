@@ -19,7 +19,7 @@ import numpy as np
 from restore import baseline, detector, metrics
 from restore.eval import score_board
 from restore.gates import smoke_verdict
-from restore.loader import synthetic_pristine
+from restore.loader import iter_hf_pairs, synthetic_pristine
 from restore.manifest import build_manifest, canonical_pair_id, seed_for_pair
 from restore.pipeline import composite_output
 from restore.simulator import simulate_damage
@@ -41,6 +41,7 @@ def build_smoke_triplets(
     pair_indices: Sequence[int],
     image_size: int = 256,
     damage_types: Optional[Sequence[str]] = None,
+    real_data_dir: Optional[str] = None,
 ) -> List[Dict[str, object]]:
     resolved = (
         list(damage_types)
@@ -49,12 +50,27 @@ def build_smoke_triplets(
     )
     entries = build_manifest(list(pair_indices))
     triplets: List[Dict[str, object]] = []
+    real_lookup: Dict[str, Dict[str, object]] = {}
+    if real_data_dir is not None:
+        for pair_id, damaged, pristine, _ in iter_hf_pairs(
+            list(pair_indices), real_data_dir, image_size, image_size, entries
+        ):
+            real_lookup[pair_id] = {"damaged": damaged, "pristine": pristine}
     for index, entry in zip(pair_indices, entries):
         pair_id = canonical_pair_id(index)
-        pristine = synthetic_pristine(pair_id, image_size, image_size)
-        damaged, damage_mask, params = simulate_damage(
-            pristine, seed=seed_for_pair(pair_id), types=resolved
-        )
+        if pair_id in real_lookup:
+            pristine = real_lookup[pair_id]["pristine"]
+            _, damage_mask, params = simulate_damage(
+                np.asarray(pristine, dtype=np.float32),
+                seed=seed_for_pair(pair_id),
+                types=["scratch", "dust"],
+            )
+            damaged = real_lookup[pair_id]["damaged"]
+        else:
+            pristine = synthetic_pristine(pair_id, image_size, image_size)
+            damaged, damage_mask, params = simulate_damage(
+                pristine, seed=seed_for_pair(pair_id), types=resolved
+            )
         triplets.append(
             {
                 "pair_id": pair_id,
@@ -91,6 +107,7 @@ def run_smoke(
     damage_types: Optional[Sequence[str]] = None,
     fix_loops_used: int = 0,
     pipeline_green: bool = False,
+    real_data_dir: Optional[str] = None,
 ) -> Dict[str, object]:
     indices = list(pair_indices)
     config = {
@@ -99,10 +116,14 @@ def run_smoke(
         "image_size": image_size,
         "pair_count": len(indices),
         "pair_indices": indices,
+        "real_data": real_data_dir or "synthetic",
     }
     triplets = build_smoke_triplets(
-        indices, image_size, damage_types if damage_types is not None
-        else list(SMOKE_CONFIG["damage_types"])
+        indices,
+        image_size,
+        damage_types if damage_types is not None
+        else list(SMOKE_CONFIG["damage_types"]),
+        real_data_dir=real_data_dir,
     )
     resolved_types = (
         list(damage_types)

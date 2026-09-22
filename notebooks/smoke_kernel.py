@@ -1,10 +1,9 @@
-"""Smoke kernel for Kaggle GPU: import the restore package, train, export.
+"""Smoke kernel for Kaggle GPU: real HF pairs, train, export.
 
-The restore package arrives as an attached Kaggle dataset
-(absalem/capstone-restore-pkg) under /kaggle/input. No training logic
-lives here: everything imports from the reviewed restore package.
-Synthetic triplets (loader pristine + simulator damage) drive the smoke
-stage per the smoke runner design; real HF streaming lands in T6.
+Downloads the OpenPhoto parquet shards to /kaggle/working/data, trains
+the detector + restorer on REAL damaged/pristine pairs (masks from our
+simulator on the real pristine images), and exports the verdict. No
+training logic lives here: everything imports from restore.
 """
 
 import argparse
@@ -43,12 +42,40 @@ def ensure_package() -> None:
         sys.path.insert(0, resolved)
 
 
+HF_PARQUET_URLS = [
+    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset"
+    "/resolve/main/data/train-0000%d-of-00005.parquet" % i
+    for i in range(5)
+] + [
+    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset"
+    "/resolve/main/data/test-00000-of-00001.parquet",
+]
+
+
+def download_parquet(dest: pathlib.Path) -> list:
+    import urllib.request
+
+    dest.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for url in HF_PARQUET_URLS:
+        target = dest / url.rsplit("/", 1)[-1]
+        if not target.is_file():
+            urllib.request.urlretrieve(url, str(target))
+        saved.append(target)
+    return saved
+
+
 def main(argv=None) -> None:
     args = parse_args(argv)
     ensure_package()
 
+    from restore.loader import HF_PARQUET_URLS as _URLS
     from restore.manifest import split_for_index
     from restore.smoke import SMOKE_CONFIG, run_smoke
+
+    _ = _URLS
+    data_dir = pathlib.Path("/kaggle/working/data")
+    download_parquet(data_dir)
 
     pairs = list(range(args.pairs))
     val_pairs = sum(1 for i in pairs if split_for_index(i) == "val")
@@ -70,6 +97,7 @@ def main(argv=None) -> None:
         train_fn=train_fn,
         out_dir=out_dir,
         image_size=args.image_size,
+        real_data_dir=str(data_dir),
     )
     weights_ok = (out_dir / "weights.json").is_file()
     board_ok = (out_dir / "figures" / "board.json").is_file()

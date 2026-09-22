@@ -1,19 +1,31 @@
-"""T2 loader: synthetic offline stand-in for HF streaming.
+"""T2 loader: HF parquet pairs on Kaggle, synthetic fallback offline.
 
-Full streaming from ``joshuachin/openphoto-restore-dataset`` runs on the
-Kaggle kernel with internet. Locally (and in pytest) the loader derives
-a deterministic pristine image per pair from its content hash, so no
-network, GPU, or dataset download is needed. Every yielded pair carries
-its manifest entry with split, damage parameters, and content hash.
+``load_hf_pair`` reads one damaged/pristine pair from the OpenPhoto
+parquet files (needs ``pyarrow`` + ``PIL``; Kaggle kernel downloads the
+parquets). ``iter_hf_pairs`` yields real pairs for an index list.
+Offline (and in pytest) the loader derives a deterministic pristine
+image per pair from its content hash, so no network, GPU, or dataset
+download is needed. Every yielded pair carries its manifest entry.
 """
 
-from typing import Dict, Iterator, List, Sequence, Tuple
+from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
 
 from restore.manifest import build_manifest, canonical_pair_id, seed_for_pair
 
 ArrayF32 = np.ndarray
+
+HF_PARQUET_URLS = tuple(
+    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset"
+    "/resolve/main/data/train-0000%d-of-00005.parquet" % i
+    for i in range(5)
+) + (
+    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset"
+    "/resolve/main/data/test-00000-of-00001.parquet",
+)
+
+_parquet_cache: Dict[str, object] = {}
 
 
 def random_crop_and_flip(
@@ -45,6 +57,73 @@ def random_crop_and_flip(
 def synthetic_pristine(pair_id: str, height: int = 64, width: int = 64) -> ArrayF32:
     rng = np.random.default_rng(seed_for_pair(pair_id))
     return rng.random((height, width, 3), dtype=np.float32)
+
+
+def _read_parquet(path: str):
+    if path in _parquet_cache:
+        return _parquet_cache[path]
+    import pyarrow.parquet as pq
+
+    table = pq.read_table(path)
+    _parquet_cache[path] = table
+    return table
+
+
+def _image_from_cell(cell) -> ArrayF32:
+    import io
+
+    from PIL import Image
+
+    raw = cell["bytes"] if isinstance(cell, dict) else cell
+    image = Image.open(io.BytesIO(bytes(raw))).convert("RGB")
+    return np.asarray(image, dtype=np.float32) / 255.0
+
+
+def load_hf_pair(
+    index: int,
+    data_dir: str = "/kaggle/working/data",
+    height: int = 256,
+    width: int = 256,
+) -> Tuple[ArrayF32, ArrayF32]:
+    """Load one real damaged/pristine pair, resized to height x width."""
+    import glob
+    import os
+
+    from PIL import Image
+
+    files = sorted(glob.glob(os.path.join(data_dir, "*.parquet")))
+    if not files:
+        raise FileNotFoundError("no parquet files in %s" % data_dir)
+    shard, row = divmod(index, 1000)
+    table = _read_parquet(files[shard % len(files)])
+    row_idx = row % table.num_rows
+    damaged = _image_from_cell(table.column("damaged_image")[row_idx].as_py())
+    pristine = _image_from_cell(table.column("pristine_image")[row_idx].as_py())
+    out = []
+    for image in (damaged, pristine):
+        pil = Image.fromarray((np.clip(image, 0.0, 1.0) * 255.0).astype(np.uint8))
+        pil = pil.resize((width, height), Image.BILINEAR)
+        out.append(np.asarray(pil, dtype=np.float32) / 255.0)
+    return out[0], out[1]
+
+
+def iter_hf_pairs(
+    indices: Sequence[int],
+    data_dir: str = "/kaggle/working/data",
+    height: int = 256,
+    width: int = 256,
+    manifest_entries: Optional[Sequence[Dict[str, object]]] = None,
+) -> Iterator[Tuple[str, ArrayF32, ArrayF32, Dict[str, object]]]:
+    entries: List[Dict[str, object]] = (
+        list(manifest_entries)
+        if manifest_entries is not None
+        else build_manifest(list(indices))
+    )
+    for index, entry in zip(indices, entries):
+        pair_id = canonical_pair_id(index)
+        assert entry["pair_id"] == pair_id
+        damaged, pristine = load_hf_pair(index, data_dir, height, width)
+        yield pair_id, damaged, pristine, entry
 
 
 def iter_pairs(
