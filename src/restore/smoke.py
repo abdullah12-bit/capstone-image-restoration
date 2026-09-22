@@ -33,7 +33,7 @@ SMOKE_CONFIG = {
     "target_pairs": 200,
     "image_size": 256,
     "sim_tier": "core",
-    "damage_types": None,
+    "damage_types": ["scratch", "dust"],
 }
 
 
@@ -42,13 +42,18 @@ def build_smoke_triplets(
     image_size: int = 256,
     damage_types: Optional[Sequence[str]] = None,
 ) -> List[Dict[str, object]]:
+    resolved = (
+        list(damage_types)
+        if damage_types is not None
+        else list(SMOKE_CONFIG["damage_types"])
+    )
     entries = build_manifest(list(pair_indices))
     triplets: List[Dict[str, object]] = []
     for index, entry in zip(pair_indices, entries):
         pair_id = canonical_pair_id(index)
         pristine = synthetic_pristine(pair_id, image_size, image_size)
         damaged, damage_mask, params = simulate_damage(
-            pristine, seed=seed_for_pair(pair_id), types=damage_types
+            pristine, seed=seed_for_pair(pair_id), types=resolved
         )
         triplets.append(
             {
@@ -95,7 +100,16 @@ def run_smoke(
         "pair_count": len(indices),
         "pair_indices": indices,
     }
-    triplets = build_smoke_triplets(indices, image_size, damage_types)
+    triplets = build_smoke_triplets(
+        indices, image_size, damage_types if damage_types is not None
+        else list(SMOKE_CONFIG["damage_types"])
+    )
+    resolved_types = (
+        list(damage_types)
+        if damage_types is not None
+        else list(config["damage_types"])
+    )
+    config = {**config, "damage_types": resolved_types}
     train_result = train_fn(triplets, config)
     fills = _fills_from_train(triplets, train_result)
     rows = []
