@@ -37,14 +37,23 @@ def parse_args(argv=None):
 
 
 def ensure_repo(repo_url: str) -> pathlib.Path:
-    dest = pathlib.Path("capstone-image-restoration")
-    if not (dest / "src").is_dir():
-        subprocess.run(["git", "clone", "--depth", "1", repo_url, str(dest)], check=True)
-    for candidate in (dest / "src", pathlib.Path("src")):
-        resolved = str(candidate.resolve())
-        if candidate.is_dir() and resolved not in sys.path:
+    here = pathlib.Path(__file__).resolve().parent
+    for candidate in (here / "restore", here.parent / "src", pathlib.Path("src")):
+        if (candidate / "__init__.py").is_file():
+            resolved = str(candidate.parent.resolve())
+            if resolved not in sys.path:
+                sys.path.insert(0, resolved)
+            break
+    else:
+        dest = pathlib.Path("capstone-image-restoration")
+        if not (dest / "src").is_dir():
+            subprocess.run(
+                ["git", "clone", "--depth", "1", repo_url, str(dest)], check=True
+            )
+        resolved = str((dest / "src").resolve())
+        if resolved not in sys.path:
             sys.path.insert(0, resolved)
-    return dest
+    return here
 
 
 def download_parquet(dest: pathlib.Path) -> list:
