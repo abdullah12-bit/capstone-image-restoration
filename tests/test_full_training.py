@@ -41,13 +41,12 @@ def _boards():
         "test": [
             {"method": "identity", "psnr": 26.0, "ssim": 0.80},
             {"method": "classical", "psnr": 27.0, "ssim": 0.83},
-            {"method": "ours", "psnr": 27.5, "ssim": 0.86},
+            {"method": "ours-detected-mask", "psnr": 27.5, "ssim": 0.86},
+            {"method": "ours-true-mask", "psnr": 28.0, "ssim": 0.88},
         ],
         "ablation": [
             {"method": "ours-true-mask", "psnr": 28.0, "ssim": 0.88},
             {"method": "ours-detected-mask", "psnr": 27.5, "ssim": 0.86},
-            {"method": "ours-core-tier", "psnr": 27.5, "ssim": 0.86},
-            {"method": "ours-extended-tier", "psnr": 27.2, "ssim": 0.84},
         ],
     }
 
@@ -127,6 +126,10 @@ def test_three_board_protocol_requires_test_and_ablation_rows():
     bad["ablation"] = [{"method": "ours", "psnr": 27.0, "ssim": 0.8}]
     with pytest.raises(ValueError):
         training.check_three_boards(bad)
+    bad2 = _boards()
+    bad2["test"] = [r for r in bad2["test"] if not str(r["method"]).startswith("ours")]
+    with pytest.raises(ValueError):
+        training.check_three_boards(bad2)
 
 
 def test_export_writes_versioned_weights_manifest_config_boards(tmp_path):

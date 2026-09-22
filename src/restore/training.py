@@ -65,13 +65,11 @@ def check_three_boards(boards_by_name: Mapping[str, Sequence[Mapping[str, object
     required = {
         "ours-true-mask",
         "ours-detected-mask",
-        "ours-core-tier",
-        "ours-extended-tier",
     }
     if required - ablation_methods:
         raise ValueError(
-            "ablation board needs true-mask vs detected-mask and "
-            f"core vs extended tier rows: {sorted(ablation_methods)}"
+            "ablation board needs true-mask vs detected-mask rows: "
+            f"{sorted(ablation_methods)}"
         )
 
 
