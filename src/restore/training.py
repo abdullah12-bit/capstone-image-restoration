@@ -58,7 +58,8 @@ def check_three_boards(boards_by_name: Mapping[str, Sequence[Mapping[str, object
     if missing:
         raise ValueError(f"three-board protocol missing boards: {sorted(missing)}")
     test_methods = {str(row["method"]) for row in boards_by_name["test"]}
-    if {"identity", "classical", "ours"} - test_methods:
+    ours_like = {m for m in test_methods if m == "ours" or m.startswith("ours-")}
+    if {"identity", "classical"} - test_methods or not ours_like:
         raise ValueError(f"test board needs identity + classical + ours rows: {sorted(test_methods)}")
     ablation_methods = {str(row["method"]) for row in boards_by_name["ablation"]}
     required = {
