@@ -1,26 +1,18 @@
-"""Smoke kernel for Kaggle GPU: clone repo, stream HF data, train, export.
+"""Smoke kernel for Kaggle GPU: import the restore package, train, export.
 
-Push with the kaggle CLI: kernels push to a GPU-enabled private kernel,
-run it, then pull outputs with kernels output. No training logic lives
-here: everything imports from the reviewed restore package.
+The restore package arrives as an attached Kaggle dataset
+(absalem/capstone-restore-pkg) under /kaggle/input. No training logic
+lives here: everything imports from the reviewed restore package.
+Synthetic triplets (loader pristine + simulator damage) drive the smoke
+stage per the smoke runner design; real HF streaming lands in T6.
 """
 
 import argparse
 import json
-import os
 import pathlib
-import subprocess
 import sys
 
-REPO = "https://github.com/abdullah12-bit/capstone-image-restoration.git"
-DATA_FILES = [
-    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset/resolve/main/data/train-00000-of-00005.parquet",
-    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset/resolve/main/data/train-00001-of-00005.parquet",
-    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset/resolve/main/data/train-00002-of-00005.parquet",
-    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset/resolve/main/data/train-00003-of-00005.parquet",
-    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset/resolve/main/data/train-00004-of-00005.parquet",
-    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset/resolve/main/data/test-00000-of-00001.parquet",
-]
+DATASET_PACKAGE = "restore"
 
 
 def parse_args(argv=None):
@@ -28,58 +20,37 @@ def parse_args(argv=None):
     parser.add_argument("--pairs", type=int, default=200)
     parser.add_argument("--image-size", type=int, default=256)
     parser.add_argument("--out-dir", default="/kaggle/working/smoke-out")
-    parser.add_argument(
-        "--repo",
-        default=REPO,
-        help="Repo URL; the Kaggle kernel clones it to import restore.",
-    )
     return parser.parse_args(argv)
 
 
-def ensure_repo(repo_url: str) -> pathlib.Path:
+def ensure_package() -> None:
     here = pathlib.Path(__file__).resolve().parent
     for candidate in (here / "restore", here.parent / "src", pathlib.Path("src")):
         if (candidate / "__init__.py").is_file():
             resolved = str(candidate.parent.resolve())
             if resolved not in sys.path:
                 sys.path.insert(0, resolved)
-            break
-    else:
-        dest = pathlib.Path("capstone-image-restoration")
-        if not (dest / "src").is_dir():
-            subprocess.run(
-                ["git", "clone", "--depth", "1", repo_url, str(dest)], check=True
-            )
-        resolved = str((dest / "src").resolve())
-        if resolved not in sys.path:
-            sys.path.insert(0, resolved)
-    return here
-
-
-def download_parquet(dest: pathlib.Path) -> list:
-    try:
-        import urllib.request
-    except ImportError:  # pragma: no cover - stdlib always present
-        return []
-    dest.mkdir(parents=True, exist_ok=True)
-    saved = []
-    for url in DATA_FILES:
-        target = dest / url.rsplit("/", 1)[-1]
-        if not target.is_file():
-            urllib.request.urlretrieve(url, target)
-        saved.append(target)
-    return saved
+            return
+    for input_root in (pathlib.Path("/kaggle/input"), pathlib.Path(".")):
+        if not input_root.is_dir():
+            continue
+        for candidate in input_root.rglob("restore/__init__.py"):
+            resolved = str(candidate.parent.parent.resolve())
+            if resolved not in sys.path:
+                sys.path.insert(0, resolved)
+            return
+    raise ImportError(
+        "restore package not found: attach the absalem/capstone-restore-pkg "
+        "dataset to the kernel"
+    )
 
 
 def main(argv=None) -> None:
     args = parse_args(argv)
-    ensure_repo(args.repo)
+    ensure_package()
 
     from restore.manifest import split_for_index
     from restore.smoke import SMOKE_CONFIG, run_smoke
-
-    data_dir = pathlib.Path("/kaggle/working/data")
-    parquet_files = download_parquet(data_dir)
 
     pairs = list(range(args.pairs))
     val_pairs = sum(1 for i in pairs if split_for_index(i) == "val")
@@ -111,7 +82,6 @@ def main(argv=None) -> None:
         "torch_cuda": torch.cuda.is_available(),
         "pairs": args.pairs,
         "val_pairs": val_pairs,
-        "parquet_files": [p.name for p in parquet_files],
         "pipeline_green": pipeline_green,
         "verdict": verdict,
         "detector": result["detector"],
