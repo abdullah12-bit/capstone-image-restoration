@@ -21,7 +21,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Run the smoke stage on Kaggle.")
     parser.add_argument("--pairs", type=int, default=200)
     parser.add_argument("--image-size", type=int, default=256)
-    parser.add_argument("--epochs", type=int, default=3)
+    parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--out-dir", default="/kaggle/working/smoke-out")
     return parser.parse_args(argv)
 
