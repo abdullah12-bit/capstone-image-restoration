@@ -16,8 +16,14 @@ T1 ships CPU-only NumPy stubs with the composite guarantee
 (clean pixels survive bit-exactly). Learned detector/restorer land in T5.
 """
 
-from restore import baseline, eval, lpips, metrics, simulator, training
+from restore import baseline, demo, eval, lpips, metrics, simulator, tiles, training
 from restore.baseline import identity, median_fill, median_restore
+from restore.demo import (
+    EXAMPLE_PAIR_IDS,
+    build_example,
+    describe_restoration,
+    serve_restoration,
+)
 from restore.eval import CLASSICAL_BASELINE, score_board
 from restore.loader import iter_pairs, random_crop_and_flip, synthetic_pristine
 from restore.lpips import lpips
@@ -40,6 +46,7 @@ from restore.simulator import (
     EXTENDED_TYPES,
     simulate_damage,
 )
+from restore.tiles import DEFAULT_OVERLAP, DEFAULT_TILE_SIZE, restore_tiled
 from restore.training import (
     BACKBONE,
     check_three_boards,
@@ -53,16 +60,22 @@ __all__ = [
     "BACKBONE",
     "CLASSICAL_BASELINE",
     "CORE_TYPES",
+    "DEFAULT_OVERLAP",
+    "DEFAULT_TILE_SIZE",
+    "EXAMPLE_PAIR_IDS",
     "EXTENDED_TYPES",
     "TEST_SIZE",
     "TOTAL_PAIRS",
     "TRAIN_POOL_SIZE",
     "baseline",
+    "build_example",
     "build_manifest",
     "canonical_pair_id",
     "check_three_boards",
     "composite_output",
     "content_hash",
+    "demo",
+    "describe_restoration",
     "detect",
     "eval",
     "export_full_run",
@@ -78,16 +91,19 @@ __all__ = [
     "random_crop_and_flip",
     "restore",
     "restore_masked",
+    "restore_tiled",
     "run_full_training",
     "save_manifest",
     "score_board",
     "seed_for_pair",
     "select_best_checkpoint",
+    "serve_restoration",
     "simulate_damage",
     "simulator",
     "split_for_index",
     "ssim",
     "synthetic_pristine",
+    "tiles",
     "training",
     "validate_full_config",
 ]

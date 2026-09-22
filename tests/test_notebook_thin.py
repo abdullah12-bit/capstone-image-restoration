@@ -1,4 +1,4 @@
-"""T1/T5: thin-notebook contract -- no duplicated pipeline logic here."""
+"""T1/T5/T8: thin-entrypoint contract -- no duplicated logic here."""
 
 import pathlib
 
@@ -26,3 +26,16 @@ def test_smoke_kernel_wires_package_seams():
     assert "def simulate_damage(" not in text
     assert "class DetectorNet" not in text
     assert "class RestorerNet" not in text
+
+
+def test_demo_app_wires_package_seams():
+    root = pathlib.Path(__file__).resolve().parents[1]
+    text = (root / "demo" / "app.py").read_text(encoding="utf-8")
+    assert "from restore.demo import" in text
+    assert "serve_restoration" in text
+    assert "build_example" in text
+    assert "def serve_restoration(" not in text
+    assert "def restore(" not in text
+    assert "def restore_tiled(" not in text
+    assert "def detect(" not in text
+    assert "def composite_output(" not in text
