@@ -17,12 +17,12 @@ from restore.manifest import build_manifest, canonical_pair_id, seed_for_pair
 ArrayF32 = np.ndarray
 
 HF_PARQUET_URLS = tuple(
-    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset"
-    "/resolve/main/data/train-0000%d-of-00005.parquet" % i
-    for i in range(5)
+    "https://huggingface.co/api/datasets/joshuachin/openphoto-restore-dataset"
+    "/parquet/default/train/%d.parquet" % i
+    for i in range(9)
 ) + (
-    "https://huggingface.co/datasets/joshuachin/openphoto-restore-dataset"
-    "/resolve/main/data/test-00000-of-00001.parquet",
+    "https://huggingface.co/api/datasets/joshuachin/openphoto-restore-dataset"
+    "/parquet/default/test/0.parquet",
 )
 
 _parquet_cache: Dict[str, object] = {}
