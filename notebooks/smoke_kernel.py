@@ -9,10 +9,12 @@ stage per the smoke runner design; real HF streaming lands in T6.
 
 import argparse
 import json
+import os
 import pathlib
+import subprocess
 import sys
 
-DATASET_PACKAGE = "restore"
+REPO_PUBLIC = "https://github.com/abdullah12-bit/capstone-image-restoration.git"
 
 
 def parse_args(argv=None):
@@ -31,18 +33,13 @@ def ensure_package() -> None:
             if resolved not in sys.path:
                 sys.path.insert(0, resolved)
             return
-    for input_root in (pathlib.Path("/kaggle/input"), pathlib.Path(".")):
-        if not input_root.is_dir():
-            continue
-        for candidate in input_root.rglob("restore/__init__.py"):
-            resolved = str(candidate.parent.parent.resolve())
-            if resolved not in sys.path:
-                sys.path.insert(0, resolved)
-            return
-    raise ImportError(
-        "restore package not found: attach the absalem/capstone-restore-pkg "
-        "dataset to the kernel"
+    dest = pathlib.Path("capstone-image-restoration")
+    subprocess.run(
+        ["git", "clone", "--depth", "1", REPO_PUBLIC, str(dest)], check=True
     )
+    resolved = str((dest / "src").resolve())
+    if resolved not in sys.path:
+        sys.path.insert(0, resolved)
 
 
 def main(argv=None) -> None:
