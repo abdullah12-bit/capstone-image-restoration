@@ -132,6 +132,7 @@ def train_one_epoch(
     triplets: list,
     device: str = "cpu",
     steps: int = 2,
+    epochs: int = 1,
 ) -> Dict[str, float]:
     detector_net = stage_models["detector"].to(device).train()
     restorer_net = stage_models["restorer"].to(device).train()
@@ -140,29 +141,30 @@ def train_one_epoch(
     detector_sum = 0.0
     restorer_sum = 0.0
     take = triplets[: max(1, min(len(triplets), steps))]
-    for triplet in take:
-        pristine = np.asarray(triplet["pristine"], dtype=np.float32)
-        damaged_np = np.asarray(triplet["damaged"], dtype=np.float32)
-        mask_np = np.asarray(triplet["damage_mask"])
-        damaged = (
-            torch.from_numpy(damaged_np).permute(2, 0, 1).unsqueeze(0).to(device)
-        )
-        mask = torch.from_numpy(mask_np).unsqueeze(0).unsqueeze(0).to(device)
-        target = torch.from_numpy(pristine).permute(2, 0, 1).unsqueeze(0).to(device)
-        detector_opt.zero_grad()
-        detector_loss = weighted_bce_dice_torch(detector_net(damaged), mask)
-        detector_loss.backward()
-        detector_opt.step()
-        detector_sum += float(detector_loss.detach())
-        restorer_opt.zero_grad()
-        conditioned = torch.cat(
-            [damaged, torch.sigmoid(detector_net(damaged)).detach()], dim=1
-        )
-        restorer_loss = restorer_loss_torch(restorer_net(conditioned), target, mask)
-        restorer_loss.backward()
-        restorer_opt.step()
-        restorer_sum += float(restorer_loss.detach())
-    count = max(1, len(take))
+    count = max(1, len(take)) * max(1, epochs)
+    for _ in range(max(1, epochs)):
+        for triplet in take:
+            pristine = np.asarray(triplet["pristine"], dtype=np.float32)
+            damaged_np = np.asarray(triplet["damaged"], dtype=np.float32)
+            mask_np = np.asarray(triplet["damage_mask"])
+            damaged = (
+                torch.from_numpy(damaged_np).permute(2, 0, 1).unsqueeze(0).to(device)
+            )
+            mask = torch.from_numpy(mask_np).unsqueeze(0).unsqueeze(0).to(device)
+            target = torch.from_numpy(pristine).permute(2, 0, 1).unsqueeze(0).to(device)
+            detector_opt.zero_grad()
+            detector_loss = weighted_bce_dice_torch(detector_net(damaged), mask)
+            detector_loss.backward()
+            detector_opt.step()
+            detector_sum += float(detector_loss.detach())
+            restorer_opt.zero_grad()
+            conditioned = torch.cat(
+                [damaged, torch.sigmoid(detector_net(damaged)).detach()], dim=1
+            )
+            restorer_loss = restorer_loss_torch(restorer_net(conditioned), target, mask)
+            restorer_loss.backward()
+            restorer_opt.step()
+            restorer_sum += float(restorer_loss.detach())
     return {
         "detector_loss": detector_sum / count,
         "restorer_loss": restorer_sum / count,
@@ -174,9 +176,14 @@ def torch_train_fn(
 ) -> Dict[str, object]:
     import restore.baseline as baseline
 
+    from restore.pipeline import composite_output
+
     stage_models = build_models()
-    train_one_epoch(stage_models, triplets, device=device)
+    epochs = int(config.get("epochs", 3))
+    steps = int(config.get("steps", len(triplets)))
+    train_one_epoch(stage_models, triplets, device=device, steps=steps, epochs=epochs)
     detector_net = stage_models["detector"].to(device).eval()
+    restorer_net = stage_models["restorer"].to(device).eval()
     scores_all = []
     fills_all = []
     with torch.no_grad():
@@ -191,8 +198,23 @@ def torch_train_fn(
             damage_scores = detector_net(damaged).squeeze(0).squeeze(0).cpu().numpy()
             probs = 1.0 / (1.0 + np.exp(-damage_scores))
             scores_all.append(probs.ravel())
+            conditioned = torch.cat(
+                [damaged, torch.sigmoid(detector_net(damaged))], dim=1
+            )
+            fill = (
+                restorer_net(conditioned)
+                .squeeze(0)
+                .permute(1, 2, 0)
+                .cpu()
+                .numpy()
+                .astype(np.float32)
+            )
+            fill = np.clip(fill, 0.0, 1.0)
+            mask_np = np.asarray(triplet["damage_mask"])
             predicted = (probs >= 0.5).astype(np.uint8)
-            fills_all.append(baseline.median_fill(damaged_np, predicted))
+            learned = composite_output(damaged_np, fill, predicted)
+            classical = baseline.median_fill(damaged_np, predicted)
+            fills_all.append(learned if np.abs(learned - damaged_np).sum() > 0 else classical)
     stacked_scores = np.concatenate(scores_all)
     stacked_truth = np.concatenate(
         [np.asarray(t["damage_mask"]).ravel() for t in triplets]
@@ -213,6 +235,8 @@ def torch_train_fn(
         "threshold": threshold,
         "fills": fills_all,
         "detector_scores": stacked_scores,
+        "epochs": epochs,
+        "steps": steps,
     }
 
 

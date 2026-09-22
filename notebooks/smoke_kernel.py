@@ -21,6 +21,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Run the smoke stage on Kaggle.")
     parser.add_argument("--pairs", type=int, default=200)
     parser.add_argument("--image-size", type=int, default=256)
+    parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--out-dir", default="/kaggle/working/smoke-out")
     return parser.parse_args(argv)
 
@@ -59,19 +60,33 @@ def main(argv=None) -> None:
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def train_fn(triplets, config):
-        return torch_train_fn(triplets, config, device=device)
+        return torch_train_fn(
+            triplets, {**config, "epochs": args.epochs}, device=device
+        )
 
     out_dir = pathlib.Path(args.out_dir)
-    result = run_smoke(
+    run_smoke(
         pair_indices=pairs,
         train_fn=train_fn,
         out_dir=out_dir,
         image_size=args.image_size,
     )
-    verdict = result["verdict"]
-    pipeline_green = bool(
-        (out_dir / "weights.json").is_file()
-        and (out_dir / "figures" / "board.json").is_file()
+    weights_ok = (out_dir / "weights.json").is_file()
+    board_ok = (out_dir / "figures" / "board.json").is_file()
+    pipeline_green = bool(weights_ok and board_ok)
+    from restore.gates import smoke_verdict
+
+    result = json.loads((out_dir / "verdict.json").read_text())
+    means = result["means"]
+    verdict = smoke_verdict(
+        pipeline_green=pipeline_green,
+        ours=means["ours"],
+        identity=means["identity"],
+        classical=means["classical"],
+    )
+    result["verdict"] = verdict
+    (out_dir / "verdict.json").write_text(
+        json.dumps(result, indent=2, default=str), encoding="utf-8"
     )
     summary = {
         "stage": SMOKE_CONFIG["stage"],
